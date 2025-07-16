@@ -6,4 +6,4 @@ langchain-google-genai
 pymongo
 huggingface_hub
 gunicorn
-
+python-dotenv

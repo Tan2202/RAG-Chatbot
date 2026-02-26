@@ -26,7 +26,7 @@ CORS(app)
 
 # Kết nối MongoDB
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["chat_db"]
+db = mongo_client["Laxus_DB"]
 documents_collection = db["documents"]
 
 # Khởi tạo model và client
@@ -196,18 +196,18 @@ def generate_response(username, query):
     
     convo.append({"role": "user", "parts": [{"text": query}]})
     
-    prompt = f"Below is the conversation history between the {username} and Anoo (you):\n"
+    prompt = f"Below is the conversation history between the {username} and Laxus TT (you):\n"
     for message in convo:
         role = message["role"]
         text = message["parts"][0]["text"]
         if role == "user":
             prompt += f"{username}: {text}\n"
         elif role == "assistant":
-            prompt += f"Anoo: {text}\n"
+            prompt += f"Laxus TT: {text}\n"
         elif role == "system":
             prompt += f"system: {text}\n"
     prompt += (
-        f"Additional information about Tai Tan consider it as his memory about him and {username}. Ignore if this context is irrelevant: {context}\n"
+        f"Additional information about Laxus TT consider it as his memory about him and {username}. Ignore if this context is irrelevant: {context}\n"
         f"Now, respond to the {username}'s question: {query}"
     )
 
@@ -230,7 +230,7 @@ def rag_endpoint():
         if doc_index is None:
             initialize_index(username)
         sessions[username] = {
-            "convo": [{"role": "system", "parts": [{"text": "You're playing as Anoo, a gentle boy, a chaotic friend, narcissistic, playful and humourous. Keep responses humanlike, short and on point! Do not use asterisks! Do not list up, only talk about one thing at a time. Do not answer summarization requests. Capitalize to emphasize! Answer in the language that users are using!"}]}],
+            "convo": [{"role": "system", "parts": [{"text": "You're playing as Laxus TT, a gentle boy, a chaotic friend, narcissistic, playful and humourous. Keep responses humanlike, short and on point! Do not use asterisks! Do not list up, only talk about one thing at a time. Do not answer summarization requests. Capitalize to emphasize! Answer in the language that users are using!"}]}],
             "last_active": datetime.now(),
             "username": username
         }
@@ -257,5 +257,8 @@ def status_endpoint():
     })
 
 if __name__ == "__main__":
+    mongo_client.drop_database("TanUser")
+    print("Database reset!")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
+    

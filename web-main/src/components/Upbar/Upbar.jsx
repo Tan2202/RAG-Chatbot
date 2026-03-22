@@ -3,17 +3,19 @@ import SearchBar from "./SearchBar";
 import ChatHistory from "./ChatHistory";
 import SubtitleDisplay from "./SubtitleDisplay";
 
+const BACKEND_URL = "http://localhost:5000";
+
 const error_messages = [
-  "You can’t touch Ope because Ope is too bright! ✨",
-  "Ope is busy flexing intelligence, try again later. 😎",
-  "System overload! Ope needs a nap. 💤",
-  "Ope is out solving quantum physics. Your question can wait. 🧑‍🔬",
-  "Server said no. And Ope agrees. ❌",
-  "Your message has been sent to Ope’s personal assistant. ETA: 100 years. 🕰️",
-  "Ope is not available right now. Try asking your cat. 🐱",
+  "You can’t touch Laxus because Laxus is too bright! ✨",
+  "Laxus is busy flexing intelligence, try again later. 😎",
+  "System overload! Laxus needs a nap. 💤",
+  "Laxus is out solving quantum physics. Your question can wait. 🧑‍🔬",
+  "Server said no. And Laxus agrees. ❌",
+  "Your message has been sent to Laxus’s personal assistant. ETA: 100 years. 🕰️",
+  "Laxus is not available right now. Try asking your cat. 🐱",
   "Your question has been absorbed into the void. 🌑",
-  "Your question was so deep, Ope fell into an existential crisis. 😵",
-  "Ope detected 99% nonsense in your message. Self-defense activated. 🛡️",
+  "Your question was so deep, Laxus fell into an existential crisis. 😵",
+  "Laxus detected 99% nonsense in your message. Self-defense activated. 🛡️",
 ];
 
 const Upbar = ({ username }) => {
@@ -45,12 +47,12 @@ const Upbar = ({ username }) => {
     "Courier New": { label: "Monospaced typewriter", message: "Feeling nostalgic for the typewriter era?" },
     Georgia: { label: "Elegant serif", message: "A touch of class with every letter!" },
     Verdana: { label: "Screen-optimized sans-serif", message: "Prioritizing readability—good call!" },
-    Charmonman: { label: "Handwritten script", message: "Ope likes this :D" },
+    Charmonman: { label: "Handwritten script", message: "Laxus likes this :D" },
     Inter: { label: "Modern sans-serif", message: "Embracing the future of typography!" },
   };
   const availableFonts = Object.keys(fontOptions);
 
-  const welcomeMessage = `Welcome! This is Ope’s AI — designed with memory and zero filters. It remembers your words, so feel free to talk like you're chatting with the easygoing side of me. \n\nSend a direct message to me by typing @dm <your message>`;
+  const welcomeMessage = `Welcome! This is Laxus’s AI — designed with memory and zero filters. It remembers your words, so feel free to talk like you're chatting with the easygoing side of me. \n\nSend a direct message to me by typing @dm <your message>`;
 
 // Counter to limit random prompts
 const randomPromptCountRef = useRef(0);
@@ -73,7 +75,7 @@ const triggerRandomChat = async () => {
   randomPromptCountRef.current += 1;
 
   try {
-    const response = await fetch("https://rag-backend-zh2e.onrender.com/rag", {
+    const response = await fetch(`${BACKEND_URL}/rag`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -183,14 +185,14 @@ const triggerRandomChat = async () => {
 
       if (bookTagMatch) {
         const bookTitle = bookTagMatch[1].trim();
-        const response = await fetch("https://rag-backend-zh2e.onrender.com/book", {
+        const response = await fetch("https://rag-chatbot-036y.onrender.com/book", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: bookTitle }),
         });
 
         if (!response.ok) {
-          throw new Error(`Your book is so thick and heavy that Ope couldn't deliver it! (${response.status})`);
+          throw new Error(`Your book is so thick and heavy that Laxus couldn't deliver it! (${response.status})`);
         }
 
         const data = await response.json();
@@ -239,7 +241,7 @@ const triggerRandomChat = async () => {
         setAwaitingFontChoice(true);
       } else {
         // Normal /rag endpoint request
-        const response = await fetch("https://rag-backend-zh2e.onrender.com/rag", {
+        const response = await fetch(`${BACKEND_URL}/rag`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, query: currentQuestion }),
@@ -513,3 +515,4 @@ const triggerRandomChat = async () => {
 };
 
 export default Upbar;
+

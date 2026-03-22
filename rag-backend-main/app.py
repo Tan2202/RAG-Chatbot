@@ -11,8 +11,15 @@ import threading
 import atexit
 import re
 from dotenv import load_dotenv
-load_dotenv()
+import psutil
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+def print_memory(stage):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024 / 1024
+    print(f"[{stage}] RAM usage: {mem:.2f} MB")
 
 # Lấy biến môi trường
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
@@ -21,6 +28,7 @@ MONGO_URI = os.environ["MONGO_URI"]
 
 # Khởi tạo Flask app và bật CORS
 app = Flask(__name__)
+print_memory("App started")
 app.secret_key = os.urandom(24)
 CORS(app)
 
@@ -30,7 +38,7 @@ db = mongo_client["Laxus_DB"]
 documents_collection = db["documents"]
 
 # Khởi tạo model và client
-genai_model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=GEMINI_API_KEY)
+genai_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=GEMINI_API_KEY)
 client = InferenceClient(api_key=HF_API_TOKEN)
 
 # Dữ liệu mẫu
@@ -61,6 +69,7 @@ doc_texts = [
 # Lưu trữ phiên trò chuyện tạm thời (dùng username làm key)
 sessions = {}
 session_event = threading.Event()
+state_lock = threading.Lock()
 
 # Biến toàn cục cho FAISS
 doc_index = None
@@ -79,7 +88,7 @@ def get_embeddings(texts):
         raise Exception(f"Hugging Face API error: {str(e)}")
 
 # Khởi tạo FAISS index
-def initialize_index(username):
+def initialize_index(username=None):
     global doc_index, doc_embeddings, doc_texts_current
     all_texts = doc_texts.copy()
     all_embeddings = []
@@ -95,32 +104,38 @@ def initialize_index(username):
         all_embeddings = []
         for text in doc_texts:
             embedding = get_embeddings([text])[0]
+            embedding = embedding.astype("float32")
             documents_collection.insert_one({
                 "text": text,
                 "embedding": embedding.tolist()
             })
             all_embeddings.append(embedding)
 
-    user_collection = db[username]
-    convo_docs = list(user_collection.find({"embedding": {"$exists": True}}))
-    for convo in convo_docs:
-        summary_sentence = convo["summary_sentence"]
-        all_embeddings.append(np.array(convo["embedding"]))
-        all_texts.append(summary_sentence)
+    if username:
+        user_collection = db[username]
+        user_docs = list(user_collection.find({}))
+        for doc in user_docs:
+            summary_text = doc.get("summary_sentence")
+            embedding = doc.get("embedding")
+            if summary_text and embedding:
+                all_texts.append(summary_text)
+                all_embeddings.append(np.array(embedding, dtype="float32"))
 
     doc_texts_current = all_texts
-    doc_embeddings = np.array(all_embeddings)
+    doc_embeddings = np.array(all_embeddings).astype("float32")
 
     dimension = doc_embeddings.shape[1]
     doc_index = faiss.IndexFlatL2(dimension)
     doc_index.add(doc_embeddings)
+    print_memory("After FAISS build")
 
 # Hàm tóm tắt và lưu DB
 def summarize_and_store(username):
     global doc_index, doc_embeddings, doc_texts_current
-    if username not in sessions:
-        return
-    convo = sessions[username]["convo"]
+    with state_lock:
+        if username not in sessions:
+            return
+        convo = list(sessions[username]["convo"])
     user_collection = db[username]
     
     conversation_text = "\n".join([
@@ -142,18 +157,20 @@ def summarize_and_store(username):
     summary_sentences = [s.strip() for s in summary.split(";") if s.strip()]
     for sentence in summary_sentences:
         embedding = get_embeddings([sentence])[0]
+        embedding = embedding.astype("float32") 
         user_collection.insert_one({
             "summary_sentence": sentence,
             "embedding": embedding.tolist(),
             "timestamp": datetime.now()
         })
 
-    del sessions[username]
-    if not sessions:
-        doc_index = None
-        doc_embeddings = None
-        doc_texts_current = None
-        session_event.clear()
+    with state_lock:
+        sessions.pop(username, None)
+        if not sessions:
+            doc_index = None
+            doc_embeddings = None
+            doc_texts_current = None
+            session_event.clear()
 
 # Hàm lưu tất cả session khi server dừng
 def save_all_sessions():
@@ -165,12 +182,19 @@ atexit.register(save_all_sessions)
 # Check timeout
 def check_timeout():
     while True:
-        if sessions:
+        with state_lock:
+            has_sessions = bool(sessions)
+            session_items = [
+                (username, data["last_active"])
+                for username, data in sessions.items()
+            ]
+
+        if has_sessions:
             now = datetime.now()
             
-            for username in list(sessions.keys()):
-                print(f"{sessions[username]['last_active']} \n {now}")
-                if now - sessions[username]["last_active"] > timedelta(minutes=3):
+            for username, last_active in session_items:
+                print(f"{last_active} \n {now}")
+                if now - last_active > timedelta(minutes=3):
                     summarize_and_store(username)
             threading.Event().wait(60)
         else:
@@ -180,17 +204,21 @@ threading.Thread(target=check_timeout, daemon=True).start()
 
 # Hàm truy xuất tài liệu
 def retrieve_docs(query, top_k=1):
-    if doc_index is None:
+    with state_lock:
+        current_index = doc_index
+        current_texts = doc_texts_current
+    if current_index is None:
         return ["No FAISS index available, waiting for a new session!"]
     query_embedding = get_embeddings([query])
-    distances, indices = doc_index.search(query_embedding, top_k)
-    return [doc_texts_current[idx] for idx in indices[0]]
+    distances, indices = current_index.search(query_embedding, top_k)
+    return [current_texts[idx] for idx in indices[0]]
 
 # Hàm sinh câu trả lời
 def generate_response(username, query):
-    if username not in sessions:
-        return "Session expired, please enter your name again!"
-    convo = sessions[username]["convo"]
+    with state_lock:
+        if username not in sessions:
+            return "Session expired, please enter your name again!"
+        convo = sessions[username]["convo"]
     retrieved_docs = retrieve_docs(query, top_k=3)
     context = "\n".join(retrieved_docs)
     
@@ -212,29 +240,34 @@ def generate_response(username, query):
     )
 
     response = genai_model.invoke(prompt).content
-    convo.append({"role": "assistant", "parts": [{"text": response}]})
-    sessions[username]["last_active"] = datetime.now()
+    with state_lock:
+        if username in sessions:
+            convo.append({"role": "assistant", "parts": [{"text": response}]})
+            sessions[username]["last_active"] = datetime.now()
     return response
 
 # API endpoint POST /rag
 @app.route('/rag', methods=['POST'])
 def rag_endpoint():
     global doc_index
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     username = data.get('username', '')
     query = data.get('query', '')
     if not username or not query:
         return jsonify({"error": "Username và query là bắt buộc!"}), 400
     
-    if username not in sessions:
-        if doc_index is None:
-            initialize_index(username)
-        sessions[username] = {
-            "convo": [{"role": "system", "parts": [{"text": "You're playing as Laxus TT, a gentle boy, a chaotic friend, narcissistic, playful and humourous. Keep responses humanlike, short and on point! Do not use asterisks! Do not list up, only talk about one thing at a time. Do not answer summarization requests. Capitalize to emphasize! Answer in the language that users are using!"}]}],
-            "last_active": datetime.now(),
-            "username": username
-        }
-        session_event.set()
+    with state_lock:
+        is_new_session = username not in sessions
+
+    if is_new_session:
+        initialize_index(username)
+        with state_lock:
+            sessions[username] = {
+                "convo": [{"role": "system", "parts": [{"text": "You're playing as Laxus TT, a gentle boy, a chaotic friend, narcissistic, playful and humourous. Keep responses humanlike, short and on point! Do not use asterisks! Do not list up, only talk about one thing at a time. Do not answer summarization requests. Capitalize to emphasize! Answer in the language that users are using!"}]}],
+                "last_active": datetime.now(),
+                "username": username
+            }
+            session_event.set()
 
     try:
         response = generate_response(username, query)
@@ -257,8 +290,6 @@ def status_endpoint():
     })
 
 if __name__ == "__main__":
-    mongo_client.drop_database("TanUser")
-    print("Database reset!")
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)
     

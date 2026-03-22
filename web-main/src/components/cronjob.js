@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://rag-backend-zh2e.onrender.com";
+const BACKEND_URL = "http://localhost:5000";
 
 // Object to track last activity time for each username
 const userLastActivity = new Map();

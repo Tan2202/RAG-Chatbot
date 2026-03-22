@@ -36,7 +36,7 @@ const ChatHistory = ({
             {convo.map((message, index) => (
               <div key={index} className="mb-2 cursor-default text-justify px-1">
                 <div className="font-handwritten mb-1 text-white inline">
-                  {message.role === "user" ? `${username.toUpperCase()}: ` : "OPE: "}
+                  {message.role === "user" ? `${username.toUpperCase()}: ` : "LAXUS: "}
                 </div>
                 <div className="text-white inline font-handwritten break-words whitespace-pre-line">
                   {message.parts[0].text}

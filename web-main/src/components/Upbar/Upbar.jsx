@@ -185,7 +185,7 @@ const triggerRandomChat = async () => {
 
       if (bookTagMatch) {
         const bookTitle = bookTagMatch[1].trim();
-        const response = await fetch("https://rag-chatbot-036y.onrender.com/book", {
+        const response = await fetch(`${BACKEND_URL}/book`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: bookTitle }),

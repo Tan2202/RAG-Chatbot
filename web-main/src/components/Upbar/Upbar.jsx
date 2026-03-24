@@ -3,7 +3,7 @@ import SearchBar from "./SearchBar";
 import ChatHistory from "./ChatHistory";
 import SubtitleDisplay from "./SubtitleDisplay";
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const error_messages = [
   "You can’t touch Laxus because Laxus is too bright! ✨",

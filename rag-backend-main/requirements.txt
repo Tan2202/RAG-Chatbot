@@ -7,3 +7,4 @@ pymongo
 huggingface_hub
 gunicorn
 python-dotenv
+psutil
